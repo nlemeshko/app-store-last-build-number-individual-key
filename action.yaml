@@ -1,4 +1,4 @@
-name: 'git '
+name: 'App Store Connect Get Last Build Number by Individual Key'
 description: 'Get last number of build.'
 inputs:
   key:
