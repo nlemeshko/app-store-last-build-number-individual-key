@@ -1,0 +1,44 @@
+name: 'git '
+description: 'Get last number of build.'
+inputs:
+  key:
+    description: 'App Store P8 Key'
+    required: true
+  key_id:
+    description: 'App Store Key ID'
+    required: true
+  app_id:
+    description: 'App Store App ID'
+    required: true
+outputs:
+  last_build_number:
+    description: 'The last build number retrieved from the App Store Connect API'
+    value: ${{ steps.get.outputs.last_build_number }}
+  increment_last_build_number:
+    description: 'Incremented the last build number retrieved from the App Store Connect API'
+    value: ${{ steps.get.outputs.increment_last_build_number }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r ${{ github.action_path }}/requirements.txt
+      shell: bash
+
+    - name: Run Python script
+      id: get
+      run: |
+        build_number=$(python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }})
+      shell: bash
+branding: 
+  icon: 'terminal'
+  color: 'blue'
