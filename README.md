@@ -51,4 +51,4 @@ jobs:
         run: |
           echo "The latest build version is $BUILD_VERSION"
 
-You can use last_build_number and increment_last_build_number.
+You can use last_build_number and increment_last_build_number and increment_last_build_number_plus.
