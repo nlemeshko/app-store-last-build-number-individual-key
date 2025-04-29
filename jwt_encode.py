@@ -64,6 +64,7 @@ def main():
         if output_path:
             with open(output_path, 'a') as f:
                 f.write(f"increment_last_build_number={int(version)+1}\n")
+                f.write(f"increment_last_build_number_plus={int(version)+2}\n")
     except (KeyError, IndexError) as e:
         print(f"Error parsing response: {e}")
         sys.exit(1)

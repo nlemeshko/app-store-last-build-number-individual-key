@@ -17,6 +17,9 @@ outputs:
   increment_last_build_number:
     description: 'Incremented the last build number retrieved from the App Store Connect API'
     value: ${{ steps.get.outputs.increment_last_build_number }}
+  increment_last_build_number_plus:
+    description: 'Incremented the last build number retrieved from the App Store Connect API and add one'
+    value: ${{ steps.get.outputs.increment_last_build_number_plus }}
 runs:
   using: 'composite'
   steps:
