@@ -8,13 +8,16 @@ import base64
 def main():
     output_path = os.environ.get('GITHUB_OUTPUT')
 
-    if len(sys.argv) != 4:
-        print("Usage: jwt_encode.py <base64_private_key> <key_id> <app_id>")
+    if len(sys.argv) < 4:
+        print("Usage: jwt_encode.py <base64_private_key> <key_id> <app_id> [app_version]")
         sys.exit(1)
 
     base64_private_key = sys.argv[1]
     key_id = sys.argv[2]
     app_id = sys.argv[3]
+    app_version = None
+    if len(sys.argv) >= 5 and sys.argv[4].strip() != "":
+        app_version = sys.argv[4].strip()
 
     # Декодируем Base64 ключ
     try:
@@ -48,6 +51,9 @@ def main():
     }
 
     url = f"https://api.appstoreconnect.apple.com/v1/builds?filter[app]={app_id}&limit=1"
+    # Если указана версия приложения, фильтруем по версии предпросмотра (preReleaseVersion.version)
+    if app_version:
+        url += f"&filter[preReleaseVersion.version]={requests.utils.quote(app_version)}"
     r = requests.get(url, headers=request_headers)
 
     if r.status_code != 200:

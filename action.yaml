@@ -10,6 +10,9 @@ inputs:
   app_id:
     description: 'App Store App ID'
     required: true
+  app_version:
+    description: 'Optional. Filter builds by pre-release version (e.g., 1.2.3)'
+    required: false
 outputs:
   last_build_number:
     description: 'The last build number retrieved from the App Store Connect API'
@@ -40,7 +43,11 @@ runs:
     - name: Run Python script
       id: get
       run: |
-        build_number=$(python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }})
+        if [ -n "${{ inputs.app_version }}" ]; then
+          python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }} ${{ inputs.app_version }}
+        else
+          python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }}
+        fi
       shell: bash
 branding: 
   icon: 'terminal'
