@@ -52,3 +52,7 @@ jobs:
           echo "The latest build version is $BUILD_VERSION"
 
 You can use last_build_number and increment_last_build_number and increment_last_build_number_plus.
+
+## Troubleshooting
+
+If the action fails with `FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`, the App Store Connect API key is still valid, but Apple is blocking API access until someone with the right permissions accepts pending agreements in App Store Connect under `Agreements, Tax, and Banking`.

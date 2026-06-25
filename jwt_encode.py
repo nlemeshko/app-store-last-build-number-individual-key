@@ -5,6 +5,86 @@ import jwt
 import requests
 import base64
 
+
+def format_api_error(response):
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+
+    errors = payload.get("errors")
+    if not isinstance(errors, list) or not errors:
+        return None
+
+    first_error = errors[0] if isinstance(errors[0], dict) else {}
+    code = first_error.get("code")
+    detail = first_error.get("detail")
+
+    if code == "FORBIDDEN.REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED":
+        message = (
+            "App Store Connect rejected the request because a required agreement is missing "
+            "or expired for this account. Open App Store Connect -> Agreements, Tax, and Banking "
+            "and accept any pending agreements, then rerun the workflow."
+        )
+        if detail:
+            message += f" Apple detail: {detail}"
+        return message
+
+    title = first_error.get("title")
+    parts = [part for part in [code, title, detail] if part]
+    if parts:
+        return " | ".join(parts)
+    return None
+
+
+def build_request_url(app_id, app_version=None, cursor=None):
+    if cursor:
+        return cursor
+
+    query_params = [
+        f"filter[app]={app_id}",
+        "limit=200",
+    ]
+    if app_version:
+        query_params.append(
+            f"filter[preReleaseVersion.version]={requests.utils.quote(app_version)}"
+        )
+    return f"https://api.appstoreconnect.apple.com/v1/builds?{'&'.join(query_params)}"
+
+
+def get_highest_build_version(request_headers, app_id, app_version=None):
+    versions = []
+    next_url = build_request_url(app_id, app_version=app_version)
+
+    while next_url:
+        response = requests.get(next_url, headers=request_headers)
+        if response.status_code != 200:
+            return None, response
+
+        response_json = response.json()
+        data = response_json.get("data", []) if isinstance(response_json, dict) else []
+        for build in data:
+            attributes = build.get("attributes", {})
+            version = attributes.get("version")
+            if version is not None:
+                versions.append(version)
+
+        links = response_json.get("links", {}) if isinstance(response_json, dict) else {}
+        next_url = links.get("next")
+
+    if not versions:
+        return None, None
+
+    numeric_versions = []
+    for version in versions:
+        try:
+            numeric_versions.append(int(version))
+        except (TypeError, ValueError):
+            raise ValueError(f"Build version '{version}' is not an integer")
+
+    return str(max(numeric_versions)), None
+
+
 def main():
     output_path = os.environ.get('GITHUB_OUTPUT')
 
@@ -50,26 +130,25 @@ def main():
         "Content-Type": "application/json"
     }
 
-    url = f"https://api.appstoreconnect.apple.com/v1/builds?filter[app]={app_id}&limit=1"
-    # Если указана версия приложения, фильтруем по версии предпросмотра (preReleaseVersion.version)
-    if app_version:
-        url += f"&filter[preReleaseVersion.version]={requests.utils.quote(app_version)}"
-    r = requests.get(url, headers=request_headers)
+    version, error_response = get_highest_build_version(
+        request_headers,
+        app_id,
+        app_version=app_version,
+    )
 
-    if r.status_code != 200:
-        # Выведем тело ответа для диагностики
+    if error_response is not None:
+        formatted_error = format_api_error(error_response)
         try:
-            error_body = r.text
+            error_body = error_response.text
         except Exception:
             error_body = "<no body>"
-        print(f"Error: {r.status_code}. Response body: {error_body}")
+        if formatted_error:
+            print(f"Error: {error_response.status_code}. {formatted_error}")
+        print(f"Response body: {error_body}")
         sys.exit(1)
 
     try:
-        response_json = r.json()
-
-        data = response_json.get("data", []) if isinstance(response_json, dict) else []
-        if not data:
+        if version is None:
             # Нет билдов по фильтрам — запишем безопасные значения и завершимся успешно
             print("No builds found for the specified app (and version filter, if provided).")
             if output_path:
@@ -79,24 +158,14 @@ def main():
                     f.write("increment_last_build_number_plus=2\n")
             return
 
-        attributes = data[0].get("attributes", {})
-        version = attributes.get("version")
-        if version is None:
-            raise KeyError("'attributes.version' is missing in the API response")
-
-        print("Last build version is: "+ version)
+        print("Last build version is: " + version)
         if output_path:
             with open(output_path, 'a') as f:
                 f.write(f"last_build_number={version}\n")
-                f.write(f"increment_last_build_number={int(version)+1}\n")
-                f.write(f"increment_last_build_number_plus={int(version)+2}\n")
+                f.write(f"increment_last_build_number={int(version) + 1}\n")
+                f.write(f"increment_last_build_number_plus={int(version) + 2}\n")
     except (KeyError, IndexError, ValueError) as e:
         print(f"Error parsing response: {e}")
-        # Попробуем вывести тело ответа для отладки
-        try:
-            print(f"Raw response: {r.text}")
-        except Exception:
-            pass
         sys.exit(1)
 
 if __name__ == "__main__":
