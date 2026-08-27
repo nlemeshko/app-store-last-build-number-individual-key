@@ -13,7 +13,20 @@ inputs:
   app_version:
     description: 'Optional. Filter builds by pre-release version (e.g., 1.2.3)'
     required: false
+  target_name:
+    description: 'Optional. Xcode target whose MARKETING_VERSION should be used (e.g., Monix)'
+    required: false
+  project_path:
+    description: 'Optional. Path to the .xcodeproj. If omitted, exactly one .xcodeproj must exist in the repository root'
+    required: false
+  configuration:
+    description: 'Xcode build configuration used to resolve MARKETING_VERSION'
+    required: false
+    default: 'Release'
 outputs:
+  app_version:
+    description: 'Explicit or target-derived app marketing version used to filter builds'
+    value: ${{ steps.resolve_version.outputs.app_version }}
   last_build_number:
     description: 'The last build number retrieved from the App Store Connect API'
     value: ${{ steps.get.outputs.last_build_number }}
@@ -40,13 +53,54 @@ runs:
         pip install -r ${{ github.action_path }}/requirements.txt
       shell: bash
 
+    - name: Resolve app version
+      id: resolve_version
+      env:
+        INPUT_APP_VERSION: ${{ inputs.app_version }}
+        INPUT_TARGET_NAME: ${{ inputs.target_name }}
+        INPUT_PROJECT_PATH: ${{ inputs.project_path }}
+        INPUT_CONFIGURATION: ${{ inputs.configuration }}
+      run: |
+        set -Eeuo pipefail
+
+        if [[ -n "$INPUT_APP_VERSION" && -n "$INPUT_TARGET_NAME" ]]; then
+          echo "Specify either app_version or target_name, not both." >&2
+          exit 1
+        fi
+
+        resolved_version="$INPUT_APP_VERSION"
+        if [[ -n "$INPUT_TARGET_NAME" ]]; then
+          args=(
+            --target "$INPUT_TARGET_NAME"
+            --configuration "$INPUT_CONFIGURATION"
+          )
+          if [[ -n "$INPUT_PROJECT_PATH" ]]; then
+            args+=(--project "$INPUT_PROJECT_PATH")
+          fi
+          resolved_version="$(python "${{ github.action_path }}/resolve_xcode_version.py" "${args[@]}")"
+        fi
+
+        echo "app_version=$resolved_version" >> "$GITHUB_OUTPUT"
+        if [[ -n "$resolved_version" ]]; then
+          echo "Using app version: $resolved_version"
+        else
+          echo "No app version filter requested; builds from all app versions will be considered."
+        fi
+      shell: bash
+
     - name: Run Python script
       id: get
+      env:
+        APP_STORE_KEY: ${{ inputs.key }}
+        APP_STORE_KEY_ID: ${{ inputs.key_id }}
+        APP_STORE_APP_ID: ${{ inputs.app_id }}
+        RESOLVED_APP_VERSION: ${{ steps.resolve_version.outputs.app_version }}
       run: |
-        if [ -n "${{ inputs.app_version }}" ]; then
-          python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }} ${{ inputs.app_version }}
+        set -Eeuo pipefail
+        if [[ -n "$RESOLVED_APP_VERSION" ]]; then
+          python "${{ github.action_path }}/jwt_encode.py" "$APP_STORE_KEY" "$APP_STORE_KEY_ID" "$APP_STORE_APP_ID" "$RESOLVED_APP_VERSION"
         else
-          python ${{ github.action_path }}/jwt_encode.py ${{ inputs.key }} ${{ inputs.key_id }} ${{ inputs.app_id }}
+          python "${{ github.action_path }}/jwt_encode.py" "$APP_STORE_KEY" "$APP_STORE_KEY_ID" "$APP_STORE_APP_ID"
         fi
       shell: bash
 branding: 
